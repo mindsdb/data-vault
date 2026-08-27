@@ -23,7 +23,7 @@ jobs:
 
   changes:
     name: Filter changed files
-    runs-on: mdb-dev
+    runs-on: ubuntu-latest
     outputs:
       not-docs: ${{ steps.filter.outputs.not-docs }}
     steps:
@@ -78,6 +78,7 @@ jobs:
           push-cache: false
 
   scan-keycloak:
+    if: ${{ !github.event.pull_request.head.repo.fork }}
     runs-on: mdb-dev
     needs: [ build ]
     name: Scan cloud-cpu image
@@ -140,7 +141,7 @@ jobs:
   tests_completed:
     name: All Tests Succeeded
     needs: [run_unit_tests, run_integration_tests, changes]
-    runs-on: mdb-dev
+    runs-on: ubuntu-latest
     if: always()
     steps:
       - name: fail if tests failed or didnt run
