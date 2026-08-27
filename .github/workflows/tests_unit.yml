@@ -113,6 +113,10 @@ jobs:
             [(.include // [])[].runs_on]
             | map(if type == "array" then .[] else . end)
             | map(tostring)
+            # An allowlist, not a denylist of our own labels, so a label nobody
+            # has thought of yet fails rather than passes. Adding a new
+            # GitHub-hosted image to matrix_includes.json means adding it here
+            # too, and the error below says which label was rejected.
             - ["ubuntu-latest","ubuntu-24.04","ubuntu-22.04","windows-latest","macos-latest"]
             | unique | join(", ")
           ' <<< "$MATRIX")
