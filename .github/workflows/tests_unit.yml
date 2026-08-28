@@ -47,7 +47,7 @@ jobs:
   # Run all of our static code checks here
   code_checking:
     name: Run static code checks
-    runs-on: mdb-dev
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,8 +57,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
-          cache-local-path: "/home/runner/_work/_tool/uv-local-cache" # Place cache in the tool dir because we mount this in our runnners
-          prune-cache: false # We want to save all cache because it's in the mount^
+          enable-cache: true
           python-version: ${{ vars.CI_PYTHON_VERSION || '3.11' }} # Default to 3.11 where vars aren't available (PRs from forks)
       # Checks the codebase for print() statements and fails if any are found
       # We should be using loggers instead
@@ -86,7 +85,7 @@ jobs:
   # Creates a matrix of environments to test against using matrix_includes.json
   matrix_prep:
     name: Prepare matrix
-    runs-on: mdb-dev
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -97,6 +96,35 @@ jobs:
         uses: JoshuaTheMiller/conditional-build-matrix@v2.0.1
         with:
           filter: "[?runOnBranch==`${{ github.ref }}` || runOnBranch==`always`]"
+      # matrix_includes.json is read from the pull request's own checkout, so on
+      # a fork PR the contributor chooses these labels. The jobs below feed them
+      # straight into `runs-on`, which is how a fork would put its own code on a
+      # pod inside our clusters without touching a workflow file.
+      - name: Reject runner labels that are not GitHub-hosted
+        env:
+          MATRIX: ${{ steps.set-matrix.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          # tostring and the array branch matter: `runs-on` also accepts a list
+          # of labels, and an entry with no `runs_on` at all reads as null. Both
+          # have to reach the comparison as strings rather than crashing jq,
+          # which would report nothing.
+          BAD=$(jq -r '
+            [(.include // [])[].runs_on]
+            | map(if type == "array" then .[] else . end)
+            | map(tostring)
+            # An allowlist, not a denylist of our own labels, so a label nobody
+            # has thought of yet fails rather than passes. Adding a new
+            # GitHub-hosted image to matrix_includes.json means adding it here
+            # too, and the error below says which label was rejected.
+            - ["ubuntu-latest","ubuntu-24.04","ubuntu-22.04","windows-latest","macos-latest"]
+            | unique | join(", ")
+          ' <<< "$MATRIX")
+          # Expect: empty, so every matrix entry names a GitHub-hosted runner
+          if [ -n "$BAD" ]; then
+            echo "::error::matrix_includes.json asks for runner labels that are not GitHub-hosted: $BAD"
+            exit 1
+          fi
 
   check_install:
     name: Check pip installation
