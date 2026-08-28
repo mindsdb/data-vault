@@ -140,11 +140,22 @@ jobs:
   # This is a collection point for all of the matrix tests above so we can have a single required job
   tests_completed:
     name: All Tests Succeeded
-    needs: [run_unit_tests, run_integration_tests, changes]
+    needs: [run_unit_tests, run_integration_tests, changes, get-deploy-labels]
     runs-on: ubuntu-latest
     if: always()
     steps:
+      # A skipped `run_integration_tests` means two different things. With no
+      # deploy label there was nothing to run them against, which is fine. A
+      # deploy that failed also leaves them skipped, which is not. Reading
+      # `!= 'success'` treated both the same, so this job failed on every
+      # first-party pull request that carried no deploy label and its red said
+      # nothing. Gate on whether anything was actually deployed instead.
       - name: fail if tests failed or didnt run
-        if: ${{ (needs.run_unit_tests.result != 'success' || (needs.run_integration_tests.result != 'success' && !github.event.pull_request.head.repo.fork)) && needs.changes.outputs.not-docs == 'true' }}
+        if: >-
+          ${{ needs.changes.outputs.not-docs == 'true'
+              && (needs.run_unit_tests.result != 'success'
+                  || (needs.get-deploy-labels.outputs.deploy-envs != '[]'
+                      && !github.event.pull_request.head.repo.fork
+                      && needs.run_integration_tests.result != 'success')) }}
         run: exit 1
       - run: echo "Tests ran successfully"
