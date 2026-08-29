@@ -206,14 +206,18 @@ class SqlalchemyRender:
             col = self.to_column(ast.Identifier(parts=["last"]))
         elif isinstance(t, ast.Constant):
             col = sa.literal(t.value)
-            if t.alias:
+            if t.value is None and not t.alias:
+                # A bare NULL must stay an unwrapped null literal. Labeling it
+                # turns `x IS NULL` into a bind-param comparison, which defeats
+                # SQLAlchemy's negate optimization: `~(x IS NULL)` then compiles
+                # identical to `x IS NULL`, silently dropping the NOT.
+                col = sa.null()
+            elif t.alias:
                 alias = self.get_alias(t.alias)
+                col = col.label(alias)
             else:
-                if t.value is None:
-                    alias = "NULL"
-                else:
-                    alias = str(t.value)
-            col = col.label(alias)
+                alias = str(t.value)
+                col = col.label(alias)
         elif isinstance(t, ast.Identifier):
             # sql functions
             col = None

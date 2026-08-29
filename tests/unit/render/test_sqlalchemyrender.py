@@ -235,3 +235,44 @@ class TestMSSQLRender:
         """).strip()
 
         assert rendered.replace("\n", "") == expected.replace("\n", " ")
+
+
+class TestNullPredicateRendering:
+    """Regression tests: negated null predicates must not lose their NOT.
+
+    Wrapping an un-aliased NULL constant in a Label turns `x IS NULL` into a
+    bind-param comparison, which defeats SQLAlchemy's negate optimization, so
+    `NOT (x IS NULL)` compiled identical to `x IS NULL` (issue #12491).
+    """
+
+    def test_not_is_null_is_preserved(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT * FROM t WHERE NOT (x IS NULL)"), with_failback=False
+        )
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x IS NOT NULL"))
+
+    def test_not_is_not_null_is_preserved(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT * FROM t WHERE NOT (x IS NOT NULL)"), with_failback=False
+        )
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x IS NULL"))
+
+    def test_not_is_null_without_parens_is_preserved(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT * FROM t WHERE NOT x IS NULL"), with_failback=False
+        )
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x IS NOT NULL"))
+
+    def test_positive_null_predicates_unchanged(self):
+        for sql in (
+            "SELECT * FROM t WHERE x IS NULL",
+            "SELECT * FROM t WHERE x IS NOT NULL",
+        ):
+            rendered = SqlalchemyRender("mysql").get_string(parse_sql(sql), with_failback=False)
+            assert str(parse_sql(rendered)) == str(parse_sql(sql))
+
+    def test_aliased_null_in_select_keeps_label(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT NULL AS nothing FROM t"), with_failback=False
+        )
+        assert "AS nothing" in rendered
