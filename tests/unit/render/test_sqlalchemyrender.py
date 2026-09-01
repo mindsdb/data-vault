@@ -272,7 +272,5 @@ class TestNullPredicateRendering:
             assert str(parse_sql(rendered)) == str(parse_sql(sql))
 
     def test_aliased_null_in_select_keeps_label(self):
-        rendered = SqlalchemyRender("mysql").get_string(
-            parse_sql("SELECT NULL AS nothing FROM t"), with_failback=False
-        )
+        rendered = SqlalchemyRender("mysql").get_string(parse_sql("SELECT NULL AS nothing FROM t"), with_failback=False)
         assert "AS nothing" in rendered
