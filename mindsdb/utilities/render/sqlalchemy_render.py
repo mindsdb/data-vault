@@ -206,18 +206,14 @@ class SqlalchemyRender:
             col = self.to_column(ast.Identifier(parts=["last"]))
         elif isinstance(t, ast.Constant):
             col = sa.literal(t.value)
-            if t.value is None and not t.alias:
-                # A bare NULL must stay an unwrapped null literal. Labeling it
-                # turns `x IS NULL` into a bind-param comparison, which defeats
-                # SQLAlchemy's negate optimization: `~(x IS NULL)` then compiles
-                # identical to `x IS NULL`, silently dropping the NOT.
-                col = sa.null()
-            elif t.alias:
+            if t.alias:
                 alias = self.get_alias(t.alias)
-                col = col.label(alias)
             else:
-                alias = str(t.value)
-                col = col.label(alias)
+                if t.value is None:
+                    alias = "NULL"
+                else:
+                    alias = str(t.value)
+            col = col.label(alias)
         elif isinstance(t, ast.Identifier):
             # sql functions
             col = None
@@ -288,6 +284,17 @@ class SqlalchemyRender:
             arg1 = self.to_expression(t.args[1])
 
             op = t.op.lower()
+            # `is` / `is not` are the only operators that accept a bare null, and
+            # the only ones whose negate optimization needs it: with a labeled
+            # NULL bind-param `NOT (x IS NULL)` compiles identical to `x IS NULL`,
+            # silently dropping the NOT. Everywhere else the labeled form must
+            # stay: SQLAlchemy rejects comparison operators against sa.null()
+            # outright and rewrites `= sa.null()` to IS NULL.
+            if op in ("is", "is not"):
+                if isinstance(t.args[0], ast.Constant) and t.args[0].value is None and not t.args[0].alias:
+                    arg0 = sa.null()
+                if isinstance(t.args[1], ast.Constant) and t.args[1].value is None and not t.args[1].alias:
+                    arg1 = sa.null()
             if op in ("in", "not in"):
                 if t.args[1].parentheses:
                     arg1 = [arg1]

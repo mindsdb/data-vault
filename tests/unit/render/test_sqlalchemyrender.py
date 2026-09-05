@@ -274,3 +274,29 @@ class TestNullPredicateRendering:
     def test_aliased_null_in_select_keeps_label(self):
         rendered = SqlalchemyRender("mysql").get_string(parse_sql("SELECT NULL AS nothing FROM t"), with_failback=False)
         assert "AS nothing" in rendered
+
+    def test_injected_null_constant_in_comparison(self):
+        # LastQuery/update_step replace `last` and subselect params with
+        # Constant(None) placeholders before injecting values; under comparison
+        # operators those must render as plain NULL, not raise ArgumentError
+        # (which would silently failback to the invalid `a > None`).
+        query = parse_sql("SELECT * FROM t WHERE x > 0")
+        query.where.args[1] = Constant(value=None)
+        rendered = SqlalchemyRender("mysql").get_string(query, with_failback=False)
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x > NULL"))
+
+    def test_not_comparison_with_null_is_preserved(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT * FROM t WHERE NOT (x > NULL)"), with_failback=False
+        )
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x <= NULL"))
+
+    def test_eq_null_is_not_rewritten_to_is_null(self):
+        rendered = SqlalchemyRender("mysql").get_string(
+            parse_sql("SELECT * FROM t WHERE x = NULL"), with_failback=False
+        )
+        assert str(parse_sql(rendered)) == str(parse_sql("SELECT * FROM t WHERE x = NULL"))
+
+    def test_unaliased_null_in_select_keeps_null_label(self):
+        rendered = SqlalchemyRender("mysql").get_string(parse_sql("SELECT NULL FROM t"), with_failback=False)
+        assert "AS `NULL`" in rendered
