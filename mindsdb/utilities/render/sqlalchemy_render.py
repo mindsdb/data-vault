@@ -284,6 +284,17 @@ class SqlalchemyRender:
             arg1 = self.to_expression(t.args[1])
 
             op = t.op.lower()
+            # `is` / `is not` are the only operators that accept a bare null, and
+            # the only ones whose negate optimization needs it: with a labeled
+            # NULL bind-param `NOT (x IS NULL)` compiles identical to `x IS NULL`,
+            # silently dropping the NOT. Everywhere else the labeled form must
+            # stay: SQLAlchemy rejects comparison operators against sa.null()
+            # outright and rewrites `= sa.null()` to IS NULL.
+            if op in ("is", "is not"):
+                if isinstance(t.args[0], ast.Constant) and t.args[0].value is None and not t.args[0].alias:
+                    arg0 = sa.null()
+                if isinstance(t.args[1], ast.Constant) and t.args[1].value is None and not t.args[1].alias:
+                    arg1 = sa.null()
             if op in ("in", "not in"):
                 if t.args[1].parentheses:
                     arg1 = [arg1]
