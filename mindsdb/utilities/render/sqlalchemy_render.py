@@ -9,7 +9,7 @@ from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.dialects import mysql, postgresql, sqlite, mssql, oracle
 from sqlalchemy.schema import CreateTable, DropTable
 from sqlalchemy.sql import operators, ColumnElement, functions as sa_fnc
-from sqlalchemy.sql.expression import ClauseElement
+from sqlalchemy.sql.expression import ClauseElement, UnaryExpression
 
 from mindsdb_sql_parser import ast
 
@@ -284,17 +284,22 @@ class SqlalchemyRender:
             arg1 = self.to_expression(t.args[1])
 
             op = t.op.lower()
-            # `is` / `is not` are the only operators that accept a bare null, and
-            # the only ones whose negate optimization needs it: with a labeled
-            # NULL bind-param `NOT (x IS NULL)` compiles identical to `x IS NULL`,
-            # silently dropping the NOT. Everywhere else the labeled form must
-            # stay: SQLAlchemy rejects comparison operators against sa.null()
-            # outright and rewrites `= sa.null()` to IS NULL.
+            # Keep bare NULL confined to IS predicates. Other expressions need
+            # the labeled literal: SQLAlchemy rewrites `= sa.null()` to IS NULL
+            # and rejects ordinary comparisons such as `> sa.null()`.
             if op in ("is", "is not"):
                 if isinstance(t.args[0], ast.Constant) and t.args[0].value is None and not t.args[0].alias:
                     arg0 = sa.null()
                 if isinstance(t.args[1], ast.Constant) and t.args[1].value is None and not t.args[1].alias:
                     arg1 = sa.null()
+                elif (
+                    self.dialect.name == "sqlite"
+                    and isinstance(t.args[1], ast.Constant)
+                    and isinstance(t.args[1].value, bool)
+                ):
+                    # SQLite's IS TRUE/FALSE tests truthiness, unlike IS 1/0.
+                    # Preserve the keyword only in this right-hand position.
+                    arg1 = sa.literal_column("TRUE" if t.args[1].value else "FALSE", type_=sa.Boolean())
             if op in ("in", "not in"):
                 if t.args[1].parentheses:
                     arg1 = [arg1]
@@ -335,10 +340,21 @@ class SqlalchemyRender:
                 "NOT": "__invert__",
                 "-": "__neg__",
             }
-            arg = self.to_expression(t.args[0])
+            operand = t.args[0]
+            arg = self.to_expression(operand)
 
-            method = opmap[t.op.upper()]
-            col = getattr(arg, method)()
+            if (
+                t.op.upper() == "NOT"
+                and isinstance(operand, ast.BinaryOperation)
+                and operand.op.lower() in ("is", "is not")
+            ):
+                # SQLAlchemy's inversion can drop NOT for expression operands.
+                # Preserve it explicitly: even swapping IS / IS NOT is not
+                # equivalent for PostgreSQL row-valued NULL predicates.
+                col = UnaryExpression(arg.self_group(), operator=operators.inv, type_=sa.Boolean())
+            else:
+                method = opmap[t.op.upper()]
+                col = getattr(arg, method)()
             if t.alias:
                 alias = self.get_alias(t.alias)
                 col = col.label(alias)
