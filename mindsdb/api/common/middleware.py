@@ -3,6 +3,7 @@ import time
 import hmac
 import secrets
 import hashlib
+import logging
 from collections import deque
 from http import HTTPStatus
 from typing import Optional
@@ -13,6 +14,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from mindsdb.utilities import log
 from mindsdb.utilities.config import config
+from mindsdb.utilities.diagnostics import request_context
 
 logger = log.getLogger(__name__)
 
@@ -180,14 +182,22 @@ def check_auth(username, password, scramble_func, salt, company_id, user_id, con
             password = password.encode()
 
         if username != hardcoded_user:
-            logger.warning(f"Check auth, user={username}: user mismatch")
+            logger.log(
+                logging.DEBUG if request_context.get() else logging.WARNING,
+                "Authentication candidate rejected",
+                extra={"event": "authentication_candidate_rejected"},
+            )
             return {"success": False}
 
         if password != hardcoded_password and password != hardcoded_password_hash:
-            logger.warning(f"check auth, user={username}: password mismatch")
+            logger.log(
+                logging.DEBUG if request_context.get() else logging.WARNING,
+                "Authentication candidate rejected",
+                extra={"event": "authentication_candidate_rejected"},
+            )
             return {"success": False}
 
-        logger.info(f"Check auth, user={username}: Ok")
+        logger.debug("Authentication candidate accepted", extra={"event": "authentication_candidate_accepted"})
         return {"success": True, "username": username, "company_id": company_id, "user_id": user_id}
     except Exception:
-        logger.exception(f"Check auth, user={username}: ERROR")
+        logger.exception("Authentication dependency failed", extra={"event": "authentication_dependency_failed"})

@@ -7,6 +7,7 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 
 from mindsdb.utilities.log import get_mindsdb_log_level
+from mindsdb.utilities.diagnostics import SafeTelemetryFilter
 
 
 def setup_logger(resource: Resource, exporter: LogExporter) -> None:
@@ -20,6 +21,8 @@ def setup_logger(resource: Resource, exporter: LogExporter) -> None:
 
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
     handler = LoggingHandler(level=mindsdb_log_level, logger_provider=logger_provider)
+
+    handler.addFilter(SafeTelemetryFilter())
 
     # Attach OTLP handler to root logger
     logging.getLogger().addHandler(handler)

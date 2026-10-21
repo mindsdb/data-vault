@@ -14,6 +14,7 @@ import uvicorn
 from mindsdb.api.http.initialize import initialize_app
 from mindsdb.interfaces.storage import db
 from mindsdb.utilities import log
+from mindsdb.utilities.diagnostics import RequestLoggingMiddleware
 from mindsdb.utilities.config import config
 from mindsdb.utilities.functions import init_lexer_parsers
 from mindsdb.integrations.libs.ml_exec_base import process_cache
@@ -115,7 +116,7 @@ def start(verbose, app: Flask = None, is_restart: bool = False):
 
     # Setting logging to None makes uvicorn use the existing logging configuration
     uvicorn.run(
-        Starlette(routes=routes, lifespan=lifespan, debug=verbose),
+        RequestLoggingMiddleware(Starlette(routes=routes, lifespan=lifespan, debug=verbose)),
         host=host,
         port=int(port),
         log_level=None,
