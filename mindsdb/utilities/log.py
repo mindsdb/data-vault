@@ -223,7 +223,12 @@ def configure_logging(process_name: str = None):
         handlers=handlers_config,
         loggers={
             "uvicorn.access": {"handlers": [], "propagate": False},
-            "uvicorn.error": {"handlers": application_handlers, "level": mindsdb_log_level, "propagate": False, "filters": ["server_diagnostic"]},
+            "uvicorn.error": {
+                "handlers": application_handlers,
+                "level": mindsdb_log_level,
+                "propagate": False,
+                "filters": ["server_diagnostic"],
+            },
             "mindsdb.http.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
             "": {  # root logger
                 "handlers": application_handlers,

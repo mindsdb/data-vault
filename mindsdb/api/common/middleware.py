@@ -182,11 +182,19 @@ def check_auth(username, password, scramble_func, salt, company_id, user_id, con
             password = password.encode()
 
         if username != hardcoded_user:
-            logger.log(logging.DEBUG if request_context.get() else logging.WARNING, "Authentication candidate rejected", extra={"event": "authentication_candidate_rejected"})
+            logger.log(
+                logging.DEBUG if request_context.get() else logging.WARNING,
+                "Authentication candidate rejected",
+                extra={"event": "authentication_candidate_rejected"},
+            )
             return {"success": False}
 
         if password != hardcoded_password and password != hardcoded_password_hash:
-            logger.log(logging.DEBUG if request_context.get() else logging.WARNING, "Authentication candidate rejected", extra={"event": "authentication_candidate_rejected"})
+            logger.log(
+                logging.DEBUG if request_context.get() else logging.WARNING,
+                "Authentication candidate rejected",
+                extra={"event": "authentication_candidate_rejected"},
+            )
             return {"success": False}
 
         logger.debug("Authentication candidate accepted", extra={"event": "authentication_candidate_accepted"})
