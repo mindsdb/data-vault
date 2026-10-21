@@ -8,7 +8,8 @@ change the CLI/framework debug setting.
 
 The HTTP boundary supplies UUID/32-hex `x-request-id` correlation, retained across
 the WSGI thread bridge. It emits final 4xx/5xx and streamed exceptions. Successful
-GET/HEAD `/api/util/ping` probes are quiet. `ACCESS_LOG_MODE=errors` is the default;
+GET/HEAD `/api/util/ping` and Docker `/api/status` probes are quiet, including
+with access logging enabled. Failed probes remain visible. `ACCESS_LOG_MODE=errors` is the default;
 `all` retains ordinary successes independently of the diagnostic threshold.
 Native Uvicorn access is disabled because it contains raw targets.
 

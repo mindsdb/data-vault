@@ -75,7 +75,7 @@ def test_http_matrix_and_wsgi_context(monkeypatch):
             logger.propagate = False
 
         async def endpoint(request):
-            return Response(status_code=int(request.path_params.get("status", 200)))
+            return Response(status_code=int(request.path_params.get("status", request.query_params.get("status", 200))))
 
         async def stream(request):
             async def body():
@@ -94,7 +94,8 @@ def test_http_matrix_and_wsgi_context(monkeypatch):
         app = RequestLoggingMiddleware(
             Starlette(
                 routes=[
-                    Route("/api/util/ping", endpoint),
+                    Route("/api/util/ping", endpoint, methods=["GET", "POST"]),
+                    Route("/api/status", endpoint, methods=["GET", "POST"]),
                     Route("/result/{status}", endpoint),
                     Route("/stream", stream),
                     Mount("/wsgi", WSGIMiddleware(flask_app)),
@@ -107,9 +108,20 @@ def test_http_matrix_and_wsgi_context(monkeypatch):
                     monkeypatch.setenv("ACCESS_LOG_MODE", mode)
                     output.seek(0)
                     output.truncate()
-                    await client.get("/api/util/ping?secret=private-query")
+                    for path in ("/api/util/ping", "/api/status"):
+                        await client.get(f"{path}?secret=private-query")
+                        await client.head(path)
                     await client.get("/result/200")
                     assert len(output.getvalue().splitlines()) == count
+                output.seek(0)
+                output.truncate()
+                for path in ("/api/util/ping", "/api/status"):
+                    await client.post(path)
+                    await client.get(f"{path}?status=503")
+                    await client.head(f"{path}?status=503")
+                events = [json.loads(line) for line in output.getvalue().splitlines()]
+                assert sum(event["event"] == "http_access" for event in events) == 2
+                assert sum(event["event"] == "request_failed" and event["status_code"] == 503 for event in events) == 4
                 output.seek(0)
                 output.truncate()
                 ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"]

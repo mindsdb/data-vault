@@ -129,7 +129,11 @@ class RequestLoggingMiddleware:
         finally:
             try:
                 if not failed:
-                    probe = method in {"GET", "HEAD"} and scope["path"] == "/api/util/ping" and 200 <= status < 300
+                    probe = (
+                        method in {"GET", "HEAD"}
+                        and scope["path"] in {"/api/util/ping", "/api/status"}
+                        and 200 <= status < 300
+                    )
                     fields = {"status_code": status, "duration_ms": round((monotonic() - start) * 1000, 2)}
                     if status >= 400:
                         fields.update(
