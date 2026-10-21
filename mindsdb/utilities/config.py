@@ -204,12 +204,12 @@ class Config:
                 "handlers": {
                     "console": {
                         "enabled": True,
-                        "formatter": "default",
-                        "level": "INFO",  # MINDSDB_CONSOLE_LOG_LEVEL or MINDSDB_LOG_LEVEL (obsolete)
+                        "formatter": "json",
+                        "level": "WARNING",  # MINDSDB_CONSOLE_LOG_LEVEL or MINDSDB_LOG_LEVEL (obsolete)
                     },
                     "file": {
                         "enabled": False,
-                        "level": "INFO",  # MINDSDB_FILE_LOG_LEVEL
+                        "level": "WARNING",  # MINDSDB_FILE_LOG_LEVEL
                         "filename": "app.log",
                         "maxBytes": 1 << 19,  # 0.5 Mb
                         "backupCount": 3,
@@ -390,6 +390,9 @@ class Config:
             self._env_config["auth"]["token"] = mindsdb_auth_token
 
         # region logging
+        if "LOG_LEVEL" in os.environ:
+            for handler in ("console", "file"):
+                self._env_config["logging"]["handlers"][handler]["level"] = os.environ["LOG_LEVEL"].upper()
         if os.environ.get("MINDSDB_LOG_LEVEL", "") != "":
             self._env_config["logging"]["handlers"]["console"]["level"] = os.environ["MINDSDB_LOG_LEVEL"]
             self._env_config["logging"]["handlers"]["console"]["enabled"] = True

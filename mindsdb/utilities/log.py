@@ -1,6 +1,5 @@
 import re
 import os
-import json
 import logging
 import threading
 from typing import Any
@@ -8,6 +7,7 @@ import warnings
 from logging.config import dictConfig
 
 from mindsdb.utilities.config import config as app_config
+from mindsdb.utilities.diagnostics import DiagnosticFormatter, ServerDiagnosticFilter
 
 # Suppress Pydantic warnings for third-party libraries
 # TODO: Work on a better solution to this
@@ -17,45 +17,18 @@ warnings.filterwarnings("ignore", message="Field.*has conflict with protected na
 logging_initialized = False
 
 
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        record_message = super().format(record)
-        log_record = {
-            "process_name": record.processName,
-            "name": record.name,
-            "message": record_message,
-            "level": record.levelname,
-            "time": record.created,
-        }
-        return json.dumps(log_record)
+class JsonFormatter(DiagnosticFormatter):
+    pass
 
 
-class ColorFormatter(logging.Formatter):
-    green = "\x1b[32;20m"
-    default = "\x1b[39;20m"
-    yellow = "\x1b[33;20m"
-    red = "\x1b[31;20m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
-    format = "%(asctime)s %(processName)15s %(levelname)-8s %(name)s: %(message)s"
-
-    FORMATS = {
-        logging.DEBUG: logging.Formatter(green + format + reset),
-        logging.INFO: logging.Formatter(default + format + reset),
-        logging.WARNING: logging.Formatter(yellow + format + reset),
-        logging.ERROR: logging.Formatter(red + format + reset),
-        logging.CRITICAL: logging.Formatter(bold_red + format + reset),
-    }
-
-    def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
-        return log_fmt.format(record)
+class ColorFormatter(DiagnosticFormatter):
+    """Legacy configuration name; diagnostics use the same safe envelope."""
 
 
 FORMATTERS = {
     "default": {"()": ColorFormatter},
     "json": {"()": JsonFormatter},
-    "file": {"format": "%(asctime)s %(processName)15s %(levelname)-8s %(name)s: %(message)s"},
+    "file": {"()": JsonFormatter},
 }
 
 
@@ -174,13 +147,15 @@ class SanitizingMixin:
 
 class StreamSanitizingHandler(SanitizingMixin, logging.StreamHandler):
     def emit(self, record):
-        record = self.sanitize_record(record)
+        if not isinstance(self.formatter, DiagnosticFormatter):
+            record = self.sanitize_record(record)
         super().emit(record)
 
 
 class FileSanitizingHandler(SanitizingMixin, logging.handlers.RotatingFileHandler):
     def emit(self, record):
-        record = self.sanitize_record(record)
+        if not isinstance(self.formatter, DiagnosticFormatter):
+            record = self.sanitize_record(record)
         super().emit(record)
 
 
@@ -237,14 +212,21 @@ def get_handlers_config(process_name: str) -> dict:
 def configure_logging(process_name: str = None):
     handlers_config = get_handlers_config(process_name)
     mindsdb_log_level = get_mindsdb_log_level()
+    application_handlers = list(handlers_config)
+    handlers_config["access"] = {"class": "logging.StreamHandler", "formatter": "json", "level": "INFO"}
 
     logging_config = dict(
         version=1,
+        disable_existing_loggers=False,
+        filters={"server_diagnostic": {"()": ServerDiagnosticFilter}},
         formatters=FORMATTERS,
         handlers=handlers_config,
         loggers={
+            "uvicorn.access": {"handlers": [], "propagate": False},
+            "uvicorn.error": {"handlers": application_handlers, "level": mindsdb_log_level, "propagate": False, "filters": ["server_diagnostic"]},
+            "mindsdb.http.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
             "": {  # root logger
-                "handlers": list(handlers_config.keys()),
+                "handlers": application_handlers,
                 "level": mindsdb_log_level,
             },
             "__main__": {

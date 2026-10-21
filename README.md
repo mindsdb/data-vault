@@ -244,3 +244,8 @@ Made with [contrib.rocks](https://contrib.rocks)
 - <a href="https://mindsdb.com/joincommunity">Community Slack</a>
 - <a href="https://mindsdb.com/press-kit?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo">Brand guidelines</a>
 - <a href="https://mindsdb.com/contact?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo">Contact form</a>
+
+## Diagnostics
+
+See [structured logging](docs/structured-logging.md) for defaults, troubleshooting
+overrides, retained evidence streams and rollout requirements.
