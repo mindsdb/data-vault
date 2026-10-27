@@ -6,6 +6,10 @@ sidebarTitle: Snowflake
 This documentation describes the integration of MindsDB with [Snowflake](https://www.snowflake.com/en/), a cloud data warehouse used to store and analyze data.
 The integration allows MindsDB to access data stored in the Snowflake database and enhance it with AI capabilities.
 
+The shared application requirements constrain SQLAlchemy to the 2.0 series. The pinned
+`snowflake-sqlalchemy==1.9.0` imports ORM interfaces removed in SQLAlchemy 2.1;
+install the application requirements together with this handler when updating an environment.
+
 <Warning>
 **Important!**
 
