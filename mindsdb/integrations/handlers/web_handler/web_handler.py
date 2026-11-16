@@ -1,4 +1,7 @@
+import ipaddress
+import socket
 from typing import List
+from urllib.parse import urlparse
 
 import pandas as pd
 from mindsdb.integrations.libs.response import HandlerStatusResponse
@@ -8,6 +11,42 @@ from .urlcrawl_helpers import get_all_websites
 
 from mindsdb.integrations.libs.api_handler import APIResource, APIHandler
 from mindsdb.integrations.utilities.sql_utils import FilterCondition, FilterOperator
+
+
+def _validate_no_private_ip(url: str) -> None:
+    """
+    Validates that the given URL does not resolve to a loopback, private,
+    link-local, multicast, or reserved IP address to prevent SSRF.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"Invalid URL provided: {url}")
+
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise ValueError(f"Could not resolve hostname for URL '{url}': {e}")
+
+    for info in addr_info:
+        ip_str = info[4][0]
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_reserved
+                or ip_obj.is_multicast
+                or ip_obj.is_unspecified
+            ):
+                raise ValueError(
+                    f"Access to private, loopback, or reserved IP addresses is forbidden: {url} ({ip_str})"
+                )
+        except ValueError as ve:
+            if "forbidden" in str(ve):
+                raise
+            continue
 
 
 class CrawlerTable(APIResource):
@@ -46,6 +85,9 @@ class CrawlerTable(APIResource):
             raise NotImplementedError(
                 'You must specify what url you want to crawl, for example: SELECT * FROM web.crawler WHERE url = "someurl"'
             )
+
+        for url in urls:
+            _validate_no_private_ip(url)
 
         allowed_urls = config.get("web_crawling_allowed_sites", [])
         if allowed_urls and not validate_urls(urls, allowed_urls):
@@ -96,3 +138,4 @@ class WebHandler(APIHandler):
         """
         response = HandlerStatusResponse(True)
         return response
+
